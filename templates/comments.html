@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}Comments - Trello Due Date Monitor{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="display-5">
+            <i class="fas fa-comments text-primary me-2"></i>Card Comments
+        </h1>
+        <p class="lead text-muted">View all comments on Trello cards with notification impacts</p>
+    </div>
+    <div class="col-md-4 text-end align-self-center">
+        <button id="refreshComments" class="btn btn-outline-primary">
+            <i class="fas fa-sync-alt me-1"></i> Refresh Comments
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card shadow h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-bell-slash me-2"></i>Notification Impact</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height: 200px;">
+                    <canvas id="notificationImpactChart"></canvas>
+                </div>
+                <div class="text-center mt-3">
+                    <p id="impactSummary" class="text-muted">Loading impact data...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filter Comments</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="cardFilter" class="form-label">Card</label>
+                            <select id="cardFilter" class="form-select">
+                                <option value="">All Cards</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="impactFilter" class="form-label">Notification Impact</label>
+                            <select id="impactFilter" class="form-select">
+                                <option value="">All</option>
+                                <option value="suppressed">Suppressed Notifications</option>
+                                <option value="normal">No Impact</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="dateFilter" class="form-label">Date Range</label>
+                            <select id="dateFilter" class="form-select">
+                                <option value="">All Time</option>
+                                <option value="today">Today</option>
+                                <option value="week">This Week</option>
+                                <option value="month">This Month</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-comment-dots me-2"></i>Comment List</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="commentsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Card</th>
+                                <th>Comment</th>
+                                <th>Date</th>
+                                <th>Impact</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="5" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Loading comments...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize chart
+    const notificationImpactCtx = document.getElementById('notificationImpactChart').getContext('2d');
+    const notificationImpactChart = new Chart(notificationImpactCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Suppressed Notifications', 'No Impact'],
+            datasets: [{
+                data: [0, 0],
+                backgroundColor: ['#f6c23e', '#4e73df'],
+                hoverBackgroundColor: ['#dda20a', '#2e59d9'],
+                hoverBorderColor: "rgba(234, 236, 244, 1)"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    display: true
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round(value / total * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            },
+            cutout: '70%'
+        }
+    });
+    
+    // Load all comments
+    function loadComments() {
+        fetch('/api/comments')
+            .then(response => response.json())
+            .then(data => {
+                // Apply filters
+                const cardFilter = document.getElementById('cardFilter').value;
+                const impactFilter = document.getElementById('impactFilter').value;
+                const dateFilter = document.getElementById('dateFilter').value;
+                
+                let filteredComments = data.comments;
+                
+                // Apply card filter
+                if (cardFilter) {
+                    filteredComments = filteredComments.filter(comment => comment.card_id === cardFilter);
+                }
+                
+                // Apply impact filter
+                if (impactFilter === 'suppressed') {
+                    filteredComments = filteredComments.filter(comment => comment.suppressed_notification);
+                } else if (impactFilter === 'normal') {
+                    filteredComments = filteredComments.filter(comment => !comment.suppressed_notification);
+                }
+                
+                // Apply date filter
+                if (dateFilter) {
+                    const now = new Date();
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const weekStart = new Date(today);
+                    weekStart.setDate(today.getDate() - today.getDay());
+                    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                    
+                    if (dateFilter === 'today') {
+                        filteredComments = filteredComments.filter(comment => {
+                            const commentDate = new Date(comment.created_at);
+                            return commentDate >= today;
+                        });
+                    } else if (dateFilter === 'week') {
+                        filteredComments = filteredComments.filter(comment => {
+                            const commentDate = new Date(comment.created_at);
+                            return commentDate >= weekStart;
+                        });
+                    } else if (dateFilter === 'month') {
+                        filteredComments = filteredComments.filter(comment => {
+                            const commentDate = new Date(comment.created_at);
+                            return commentDate >= monthStart;
+                        });
+                    }
+                }
+                
+                // Update chart
+                const suppressedCount = filteredComments.filter(comment => comment.suppressed_notification).length;
+                const noImpactCount = filteredComments.filter(comment => !comment.suppressed_notification).length;
+                
+                notificationImpactChart.data.datasets[0].data = [suppressedCount, noImpactCount];
+                notificationImpactChart.update();
+                
+                // Update impact summary
+                const totalComments = filteredComments.length;
+                const suppressedPercentage = totalComments > 0 ? Math.round((suppressedCount / totalComments) * 100) : 0;
+                
+                document.getElementById('impactSummary').textContent = 
+                    `${suppressedCount} out of ${totalComments} comments (${suppressedPercentage}%) have suppressed notifications`;
+                
+                // Update table
+                const tableBody = document.querySelector('#commentsTable tbody');
+                
+                if (filteredComments.length === 0) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="text-center py-4">
+                                <i class="fas fa-comment-slash fa-3x text-muted mb-3"></i>
+                                <p>No comments found matching your filters.</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                // Sort comments by date (newest first)
+                filteredComments.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                
+                // Build table rows
+                let tableHtml = '';
+                
+                Promise.all(filteredComments.map(comment => 
+                    fetch(`/api/card/${comment.card_id}`)
+                        .then(res => res.json())
+                        .then(card => ({ ...comment, card_name: card.name }))
+                )).then(commentsWithCard => {
+                    commentsWithCard.forEach(comment => {
+                        const formattedDate = comment.created_at.replace('T', ' ').replace('Z', '');
+                        const truncatedComment = comment.comment_text.length > 100 ? 
+                            comment.comment_text.substring(0, 100) + '...' : 
+                            comment.comment_text;
+                        
+                        tableHtml += `
+                            <tr>
+                                <td>
+                                    <a href="/card/${comment.card_id}" class="text-decoration-none fw-bold">
+                                        ${comment.card_name || 'Unknown Card'}
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="comment-text">${truncatedComment}</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-calendar-alt me-1"></i>
+                                        ${formattedDate}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-${comment.suppressed_notification ? 'warning' : 'info'}">
+                                        <i class="fas fa-${comment.suppressed_notification ? 'bell-slash' : 'bell'} me-1"></i>
+                                        ${comment.suppressed_notification ? 'Suppressed Notification' : 'No Impact'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="/card/${comment.card_id}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye me-1"></i>View Card
+                                    </a>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    tableBody.innerHTML = tableHtml;
+                    
+                    // Populate card filter options
+                    const cardFilter = document.getElementById('cardFilter');
+                    const cardOptions = new Set();
+                    
+                    // Clear existing options except the first one
+                    while (cardFilter.options.length > 1) {
+                        cardFilter.remove(1);
+                    }
+                    
+                    commentsWithCard.forEach(comment => {
+                        if (!cardOptions.has(comment.card_id) && comment.card_name) {
+                            cardOptions.add(comment.card_id);
+                            
+                            const option = document.createElement('option');
+                            option.value = comment.card_id;
+                            option.textContent = comment.card_name;
+                            cardFilter.appendChild(option);
+                        }
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error loading comments:', error);
+                const tableBody = document.querySelector('#commentsTable tbody');
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-danger">
+                            <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                            <p>Error loading comments.</p>
+                        </td>
+                    </tr>
+                `;
+            });
+    }
+    
+    // Load comments on page load
+    loadComments();
+    
+    // Set up refresh button
+    document.getElementById('refreshComments').addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-sync-alt fa-spin me-1"></i> Refreshing...';
+        
+        // Refresh comments
+        loadComments();
+        
+        setTimeout(() => {
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Refresh Comments';
+        }, 1000);
+    });
+    
+    // Set up filter change listeners
+    document.getElementById('cardFilter').addEventListener('change', loadComments);
+    document.getElementById('impactFilter').addEventListener('change', loadComments);
+    document.getElementById('dateFilter').addEventListener('change', loadComments);
+});
+</script>
+{% endblock %} 

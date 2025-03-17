@@ -19,7 +19,7 @@
 
 <div class="row mb-4">
     <!-- Cards with due dates count -->
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card shadow h-100">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -36,7 +36,7 @@
     </div>
     
     <!-- Due date changes over time -->
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card shadow h-100">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -53,7 +53,7 @@
     </div>
     
     <!-- Reminder status breakdown -->
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card shadow h-100">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -64,6 +64,26 @@
                 </div>
                 <div class="chart-container" style="position: relative; height: 200px;">
                     <canvas id="reminderStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Suppressed notifications -->
+    <div class="col-md-3">
+        <div class="card shadow h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="card-title mb-0 text-primary">
+                        <i class="fas fa-bell-slash me-2"></i>Suppressed Notifications
+                    </h5>
+                    <span class="badge bg-primary rounded-pill" id="totalSuppressed">-</span>
+                </div>
+                <div class="chart-container" style="position: relative; height: 200px;">
+                    <canvas id="suppressedChart"></canvas>
+                </div>
+                <div class="text-center mt-3">
+                    <p class="small text-muted">Notifications suppressed due to comments</p>
                 </div>
             </div>
         </div>
@@ -84,12 +104,13 @@
                                 <th>Card</th>
                                 <th>List</th>
                                 <th>Due Date</th>
+                                <th>Notifications</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td colspan="4" class="text-center py-4">
+                                <td colspan="5" class="text-center py-4">
                                     <div class="spinner-border text-primary" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
@@ -132,6 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const cardsPerListCtx = document.getElementById('cardsPerListChart').getContext('2d');
     const dueChangesCtx = document.getElementById('dueChangesChart').getContext('2d');
     const reminderStatusCtx = document.getElementById('reminderStatusChart').getContext('2d');
+    const suppressedCtx = document.getElementById('suppressedChart').getContext('2d');
     
     const cardsPerListChart = new Chart(cardsPerListCtx, {
         type: 'doughnut',
@@ -248,6 +270,41 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    const suppressedChart = new Chart(suppressedCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Auto-suppressed', 'Manual'],
+            datasets: [{
+                data: [0, 0],
+                backgroundColor: ['#f6c23e', '#4e73df'],
+                hoverBackgroundColor: ['#dda20a', '#2e59d9'],
+                hoverBorderColor: "rgba(234, 236, 244, 1)"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    display: true
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round(value / total * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            },
+            cutout: '70%'
+        }
+    });
+    
     // Function to load dashboard data
     function loadDashboardData() {
         fetch('/api/dashboard-data')
@@ -294,6 +351,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     reminderStatusChart.update();
                     
                     document.getElementById('totalReminders').textContent = totalReminders;
+                    
+                    // Update Suppressed chart
+                    const autoSuppressed = data.auto_suppressed || 0;
+                    const manual = read - autoSuppressed;
+                    
+                    suppressedChart.data.datasets[0].data = [autoSuppressed, manual];
+                    suppressedChart.update();
+                    
+                    document.getElementById('totalSuppressed').textContent = autoSuppressed;
                 }
             })
             .catch(error => {
@@ -315,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (cardsWithDue.length === 0) {
                     tableBody.innerHTML = `
                         <tr>
-                            <td colspan="4" class="text-center py-4">
+                            <td colspan="5" class="text-center py-4">
                                 <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
                                 <p>No cards with upcoming due dates found.</p>
                             </td>
@@ -328,45 +394,58 @@ document.addEventListener('DOMContentLoaded', function() {
                 let tableHtml = '';
                 const now = new Date();
                 
-                cardsWithDue.forEach(card => {
-                    const dueDate = new Date(card.due_date);
-                    const isOverdue = dueDate < now;
-                    const formattedDue = card.due_date.replace('T', ' ').replace('Z', '');
+                Promise.all(cardsWithDue.map(card => 
+                    fetch(`/api/card/${card.card_id}/notification-status`)
+                        .then(res => res.json())
+                        .then(status => ({ ...card, notification_status: status }))
+                )).then(cardsWithStatus => {
+                    cardsWithStatus.forEach(card => {
+                        const dueDate = new Date(card.due_date);
+                        const isOverdue = dueDate < now;
+                        const formattedDue = card.due_date.replace('T', ' ').replace('Z', '');
+                        const notificationsMuted = card.notification_status?.notifications_muted;
+                        
+                        tableHtml += `
+                            <tr>
+                                <td>
+                                    <a href="/card/${card.card_id}" class="text-decoration-none fw-bold">
+                                        ${card.name}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">${card.list_name}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-${isOverdue ? 'danger' : 'success'}">
+                                        <i class="fas fa-${isOverdue ? 'exclamation-circle' : 'calendar-alt'} me-1"></i>
+                                        ${formattedDue}
+                                        ${isOverdue ? ' (Overdue)' : ''}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-${notificationsMuted ? 'warning' : 'info'}">
+                                        <i class="fas fa-${notificationsMuted ? 'bell-slash' : 'bell'} me-1"></i>
+                                        ${notificationsMuted ? 'Muted' : 'Active'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="${card.url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-external-link-alt me-1"></i>Open in Trello
+                                    </a>
+                                </td>
+                            </tr>
+                        `;
+                    });
                     
-                    tableHtml += `
-                        <tr>
-                            <td>
-                                <a href="/card/${card.card_id}" class="text-decoration-none fw-bold">
-                                    ${card.name}
-                                </a>
-                            </td>
-                            <td>
-                                <span class="badge bg-secondary">${card.list_name}</span>
-                            </td>
-                            <td>
-                                <span class="badge bg-${isOverdue ? 'danger' : 'success'}">
-                                    <i class="fas fa-${isOverdue ? 'exclamation-circle' : 'calendar-alt'} me-1"></i>
-                                    ${formattedDue}
-                                    ${isOverdue ? ' (Overdue)' : ''}
-                                </span>
-                            </td>
-                            <td>
-                                <a href="${card.url}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-external-link-alt me-1"></i>Open in Trello
-                                </a>
-                            </td>
-                        </tr>
-                    `;
+                    tableBody.innerHTML = tableHtml;
                 });
-                
-                tableBody.innerHTML = tableHtml;
             })
             .catch(error => {
                 console.error('Error loading upcoming due dates:', error);
                 const tableBody = document.querySelector('#upcomingDueTable tbody');
                 tableBody.innerHTML = `
                     <tr>
-                        <td colspan="4" class="text-center py-4 text-danger">
+                        <td colspan="5" class="text-center py-4 text-danger">
                             <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
                             <p>Error loading upcoming due dates.</p>
                         </td>

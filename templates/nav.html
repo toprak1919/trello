@@ -1,0 +1,72 @@
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+    <div class="container">
+        <a class="navbar-brand" href="/">
+            <i class="fab fa-trello me-2"></i>
+            Trello Due Date Monitor
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'home' %}active{% endif %}" href="/">
+                        <i class="fas fa-home me-1"></i> Home
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard">
+                        <i class="fas fa-chart-bar me-1"></i> Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'reminders' %}active{% endif %}" href="/reminders">
+                        <i class="fas fa-bell me-1"></i> Reminders
+                        <span id="unreadCountBadge" class="badge rounded-pill bg-danger"></span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'cards' %}active{% endif %}" href="/cards">
+                        <i class="fas fa-clipboard-list me-1"></i> Cards
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'comments' %}active{% endif %}" href="/comments">
+                        <i class="fas fa-comments me-1"></i> Comments
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if active_page == 'settings' %}active{% endif %}" href="/settings">
+                        <i class="fas fa-cogs me-1"></i> Settings
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<script>
+    // Update unread count badge
+    function updateUnreadCount() {
+        fetch('/api/reminders/unread-count')
+            .then(response => response.json())
+            .then(data => {
+                const badge = document.getElementById('unreadCountBadge');
+                if (data.count > 0) {
+                    badge.textContent = data.count;
+                    badge.style.display = 'inline';
+                } else {
+                    badge.style.display = 'none';
+                }
+            })
+            .catch(error => console.error('Error fetching unread count:', error));
+    }
+    
+    // Update count on page load
+    updateUnreadCount();
+    
+    // Update count every minute
+    setInterval(updateUnreadCount, 60000);
+</script> 
