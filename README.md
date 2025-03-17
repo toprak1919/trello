@@ -100,10 +100,10 @@ http://localhost:5000
 ## Web UI Screenshots
 
 ### Reminders Dashboard
-![Reminders Dashboard](https://placeholder-image-url.com/dashboard.png)
+![Reminders Dashboard](reminders.png)
 
 ### Analytics View
-![Analytics View](https://placeholder-image-url.com/analytics.png)
+![Analytics View](analytics.png)
 
 ### Card Details
 ![Card Details](https://placeholder-image-url.com/card-details.png)
