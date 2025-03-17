@@ -26,6 +26,13 @@ TRELLO_CARDS_DB = 'trello_cards.db'
 
 app = Flask(__name__)
 
+# Add utility functions to Jinja environment
+@app.context_processor
+def utility_processor():
+    def now():
+        return datetime.now()
+    return dict(now=now)
+
 def get_db_connection(db_name=DATABASE):
     """Create a database connection and return connection and cursor."""
     conn = sqlite3.connect(db_name)

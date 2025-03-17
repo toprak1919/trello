@@ -1,0 +1,510 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Trello Due Date Monitor{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="display-5">
+            <i class="fas fa-chart-bar text-primary me-2"></i>Dashboard
+        </h1>
+        <p class="lead text-muted">Analytics and insights about your Trello cards and due dates</p>
+    </div>
+    <div class="col-md-4 text-end align-self-center">
+        <button id="refreshDashboard" class="btn btn-outline-primary">
+            <i class="fas fa-sync-alt me-1"></i> Refresh Data
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Cards with due dates count -->
+    <div class="col-md-4">
+        <div class="card shadow h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="card-title mb-0 text-primary">
+                        <i class="fas fa-clipboard-list me-2"></i>Cards with Due Dates
+                    </h5>
+                    <span class="badge bg-primary rounded-pill" id="totalCardsWithDue">-</span>
+                </div>
+                <div class="chart-container" style="position: relative; height: 200px;">
+                    <canvas id="cardsPerListChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Due date changes over time -->
+    <div class="col-md-4">
+        <div class="card shadow h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="card-title mb-0 text-primary">
+                        <i class="fas fa-history me-2"></i>Due Date Changes
+                    </h5>
+                    <span class="badge bg-primary rounded-pill" id="totalChanges">-</span>
+                </div>
+                <div class="chart-container" style="position: relative; height: 200px;">
+                    <canvas id="dueChangesChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Reminder status breakdown -->
+    <div class="col-md-4">
+        <div class="card shadow h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="card-title mb-0 text-primary">
+                        <i class="fas fa-bell me-2"></i>Reminder Status
+                    </h5>
+                    <span class="badge bg-primary rounded-pill" id="totalReminders">-</span>
+                </div>
+                <div class="chart-container" style="position: relative; height: 200px;">
+                    <canvas id="reminderStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Upcoming Due Dates</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="upcomingDueTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Card</th>
+                                <th>List</th>
+                                <th>Due Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="4" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Loading upcoming due dates...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-list-alt me-2"></i>Cards by List</h5>
+            </div>
+            <div class="card-body">
+                <div id="listSummaryContainer">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading list summary...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize charts
+    const cardsPerListCtx = document.getElementById('cardsPerListChart').getContext('2d');
+    const dueChangesCtx = document.getElementById('dueChangesChart').getContext('2d');
+    const reminderStatusCtx = document.getElementById('reminderStatusChart').getContext('2d');
+    
+    const cardsPerListChart = new Chart(cardsPerListCtx, {
+        type: 'doughnut',
+        data: {
+            labels: [],
+            datasets: [{
+                data: [],
+                backgroundColor: [
+                    '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b',
+                    '#5a5c69', '#858796', '#f8f9fc', '#d1d3e2', '#b7b9cc'
+                ],
+                hoverBackgroundColor: [
+                    '#2e59d9', '#17a673', '#2c9faf', '#dda20a', '#be2617',
+                    '#484a54', '#717384', '#e6e8ef', '#c0c2d0', '#a5a7b8'
+                ],
+                hoverBorderColor: "rgba(234, 236, 244, 1)",
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    display: true
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round(value / total * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            },
+            cutout: '70%'
+        }
+    });
+    
+    const dueChangesChart = new Chart(dueChangesCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Due Date Changes',
+                data: [],
+                lineTension: 0.4,
+                backgroundColor: "rgba(78, 115, 223, 0.05)",
+                borderColor: "rgba(78, 115, 223, 1)",
+                pointRadius: 3,
+                pointBackgroundColor: "rgba(78, 115, 223, 1)",
+                pointBorderColor: "rgba(78, 115, 223, 1)",
+                pointHoverRadius: 5,
+                pointHoverBackgroundColor: "rgba(78, 115, 223, 1)",
+                pointHoverBorderColor: "rgba(78, 115, 223, 1)",
+                pointHitRadius: 10,
+                pointBorderWidth: 2,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+    
+    const reminderStatusChart = new Chart(reminderStatusCtx, {
+        type: 'pie',
+        data: {
+            labels: ['Read', 'Unread'],
+            datasets: [{
+                data: [0, 0],
+                backgroundColor: ['#1cc88a', '#4e73df'],
+                hoverBackgroundColor: ['#17a673', '#2e59d9'],
+                hoverBorderColor: "rgba(234, 236, 244, 1)"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    display: true
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round(value / total * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Function to load dashboard data
+    function loadDashboardData() {
+        fetch('/api/dashboard-data')
+            .then(response => response.json())
+            .then(data => {
+                // Update Cards Per List chart
+                if (data.lists && data.lists.length > 0) {
+                    const labels = data.lists.map(item => item.list_name);
+                    const counts = data.lists.map(item => item.count);
+                    const totalCards = counts.reduce((a, b) => a + b, 0);
+                    
+                    cardsPerListChart.data.labels = labels;
+                    cardsPerListChart.data.datasets[0].data = counts;
+                    cardsPerListChart.update();
+                    
+                    document.getElementById('totalCardsWithDue').textContent = totalCards;
+                }
+                
+                // Update Due Date Changes chart
+                if (data.activity && data.activity.length > 0) {
+                    const labels = data.activity.map(item => item.date);
+                    const counts = data.activity.map(item => item.count);
+                    const totalChanges = counts.reduce((a, b) => a + b, 0);
+                    
+                    dueChangesChart.data.labels = labels;
+                    dueChangesChart.data.datasets[0].data = counts;
+                    dueChangesChart.update();
+                    
+                    document.getElementById('totalChanges').textContent = totalChanges;
+                }
+                
+                // Update Reminder Status chart
+                if (data.status && data.status.length > 0) {
+                    const statusMap = data.status.reduce((acc, item) => {
+                        acc[item.is_read] = item.count;
+                        return acc;
+                    }, {});
+                    
+                    const read = statusMap[1] || 0;
+                    const unread = statusMap[0] || 0;
+                    const totalReminders = read + unread;
+                    
+                    reminderStatusChart.data.datasets[0].data = [read, unread];
+                    reminderStatusChart.update();
+                    
+                    document.getElementById('totalReminders').textContent = totalReminders;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading dashboard data:', error);
+            });
+    }
+    
+    // Load upcoming due dates
+    function loadUpcomingDueDates() {
+        fetch('/api/cards')
+            .then(response => response.json())
+            .then(cards => {
+                // Filter cards with due dates and sort by due date
+                const cardsWithDue = cards.filter(card => card.due_date)
+                    .sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+                
+                const tableBody = document.querySelector('#upcomingDueTable tbody');
+                
+                if (cardsWithDue.length === 0) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-center py-4">
+                                <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                                <p>No cards with upcoming due dates found.</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                // Build table rows for upcoming due dates
+                let tableHtml = '';
+                const now = new Date();
+                
+                cardsWithDue.forEach(card => {
+                    const dueDate = new Date(card.due_date);
+                    const isOverdue = dueDate < now;
+                    const formattedDue = card.due_date.replace('T', ' ').replace('Z', '');
+                    
+                    tableHtml += `
+                        <tr>
+                            <td>
+                                <a href="/card/${card.card_id}" class="text-decoration-none fw-bold">
+                                    ${card.name}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">${card.list_name}</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-${isOverdue ? 'danger' : 'success'}">
+                                    <i class="fas fa-${isOverdue ? 'exclamation-circle' : 'calendar-alt'} me-1"></i>
+                                    ${formattedDue}
+                                    ${isOverdue ? ' (Overdue)' : ''}
+                                </span>
+                            </td>
+                            <td>
+                                <a href="${card.url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-external-link-alt me-1"></i>Open in Trello
+                                </a>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableBody.innerHTML = tableHtml;
+            })
+            .catch(error => {
+                console.error('Error loading upcoming due dates:', error);
+                const tableBody = document.querySelector('#upcomingDueTable tbody');
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-danger">
+                            <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                            <p>Error loading upcoming due dates.</p>
+                        </td>
+                    </tr>
+                `;
+            });
+    }
+    
+    // Load list summary
+    function loadListSummary() {
+        fetch('/api/cards')
+            .then(response => response.json())
+            .then(cards => {
+                // Group cards by list
+                const listGroups = {};
+                cards.forEach(card => {
+                    const listName = card.list_name || 'Unknown List';
+                    if (!listGroups[listName]) {
+                        listGroups[listName] = [];
+                    }
+                    listGroups[listName].push(card);
+                });
+                
+                // Sort lists by card count (descending)
+                const sortedLists = Object.keys(listGroups).sort((a, b) => 
+                    listGroups[b].length - listGroups[a].length
+                );
+                
+                const container = document.getElementById('listSummaryContainer');
+                
+                if (sortedLists.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-4">
+                            <i class="fas fa-clipboard fa-3x text-muted mb-3"></i>
+                            <p>No cards found.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Build list summary HTML
+                let html = '<div class="row">';
+                
+                sortedLists.forEach(listName => {
+                    const listCards = listGroups[listName];
+                    const cardsWithDue = listCards.filter(card => card.due_date).length;
+                    
+                    html += `
+                        <div class="col-md-4 mb-4">
+                            <div class="card h-100 border-left-primary">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h6 class="m-0 font-weight-bold text-primary">${listName}</h6>
+                                    <div>
+                                        <span class="badge bg-primary rounded-pill">${listCards.length} cards</span>
+                                    </div>
+                                </div>
+                                <div class="card-body p-0">
+                                    <ul class="list-group list-group-flush">
+                    `;
+                    
+                    // Add cards with due dates at the top
+                    listCards
+                        .filter(card => card.due_date)
+                        .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
+                        .forEach(card => {
+                            const dueDate = new Date(card.due_date);
+                            const isOverdue = dueDate < new Date();
+                            const formattedDue = card.due_date.replace('T', ' ').replace('Z', '');
+                            
+                            html += `
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <a href="/card/${card.card_id}" class="text-decoration-none">
+                                        ${card.name}
+                                    </a>
+                                    <span class="badge bg-${isOverdue ? 'danger' : 'success'} rounded-pill">
+                                        ${formattedDue}
+                                    </span>
+                                </li>
+                            `;
+                        });
+                    
+                    // Add cards without due dates
+                    listCards
+                        .filter(card => !card.due_date)
+                        .forEach(card => {
+                            html += `
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <a href="/card/${card.card_id}" class="text-decoration-none">
+                                        ${card.name}
+                                    </a>
+                                    <span class="badge bg-secondary rounded-pill">No due date</span>
+                                </li>
+                            `;
+                        });
+                    
+                    html += `
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                container.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error loading list summary:', error);
+                const container = document.getElementById('listSummaryContainer');
+                container.innerHTML = `
+                    <div class="text-center py-4 text-danger">
+                        <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                        <p>Error loading list summary.</p>
+                    </div>
+                `;
+            });
+    }
+    
+    // Load all dashboard data
+    loadDashboardData();
+    loadUpcomingDueDates();
+    loadListSummary();
+    
+    // Set up refresh button
+    document.getElementById('refreshDashboard').addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-sync-alt fa-spin me-1"></i> Refreshing...';
+        
+        // Refresh all data
+        loadDashboardData();
+        loadUpcomingDueDates();
+        loadListSummary();
+        
+        setTimeout(() => {
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Refresh Data';
+        }, 1000);
+    });
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}{{ card.name }} - Trello Due Date Monitor{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Reminders</a></li>
+                <li class="breadcrumb-item active">Card Details</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-sticky-note me-2"></i>{{ card.name }}
+                </h5>
+                <a href="{{ card.url }}" target="_blank" class="btn btn-sm btn-light">
+                    <i class="fas fa-external-link-alt me-1"></i>Open in Trello
+                </a>
+            </div>
+            <div class="card-body">
+                {% if card.description %}
+                <div class="mb-4">
+                    <h6 class="fw-bold text-muted">Description</h6>
+                    <p class="card-text">{{ card.description | replace('\n', '<br>') | safe }}</p>
+                </div>
+                {% endif %}
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-muted">List</h6>
+                            <p class="card-text">
+                                <span class="badge bg-secondary">{{ card.list_name }}</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-muted">Due Date</h6>
+                            <p class="card-text">
+                                {% if card.due_date %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-calendar-alt me-1"></i>
+                                    {{ card.due_date | replace('T', ' ') | replace('Z', '') }}
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">No due date set</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-12">
+                        <div>
+                            <h6 class="fw-bold text-muted">Card ID</h6>
+                            <p class="card-text text-monospace small">{{ card.card_id }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer text-muted small">
+                Last updated: {{ card.last_updated }}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="fas fa-history me-2"></i>Due Date History</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="reminder-timeline" id="reminderTimeline">
+                    <div class="text-center p-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading due date history...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const cardId = '{{ card.card_id }}';
+    const timelineContainer = document.getElementById('reminderTimeline');
+    
+    // Fetch reminders for this card
+    fetch(`/api/reminders?limit=100&offset=0`)
+        .then(response => response.json())
+        .then(data => {
+            // Filter reminders for this card
+            const cardReminders = data.filter(reminder => reminder.card_id === cardId);
+            
+            if (cardReminders.length === 0) {
+                timelineContainer.innerHTML = `
+                    <div class="text-center p-4">
+                        <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                        <p>No due date changes recorded for this card.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort by created_at descending
+            cardReminders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            
+            // Build timeline HTML
+            let timelineHtml = '<ul class="list-group list-group-flush">';
+            
+            cardReminders.forEach(reminder => {
+                const formattedDate = new Date(reminder.created_at).toLocaleString();
+                let oldDue = 'Not set';
+                if (reminder.old_due) {
+                    oldDue = reminder.old_due.replace(/T/g, ' ').replace(/Z/g, '');
+                }
+                
+                let newDue = 'Removed';
+                if (reminder.new_due) {
+                    newDue = reminder.new_due.replace(/T/g, ' ').replace(/Z/g, '');
+                }
+                
+                timelineHtml += `
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">${formattedDate}</small>
+                            <span class="badge bg-${reminder.is_read ? 'secondary' : 'primary'} rounded-pill">
+                                ${reminder.is_read ? 'Read' : 'New'}
+                            </span>
+                        </div>
+                        <div class="mt-2">
+                            <div class="small text-muted">From: ${oldDue}</div>
+                            <div class="text-success">To: ${newDue}</div>
+                        </div>
+                    </li>
+                `;
+            });
+            
+            timelineHtml += '</ul>';
+            timelineContainer.innerHTML = timelineHtml;
+        })
+        .catch(error => {
+            console.error('Error fetching reminders:', error);
+            timelineContainer.innerHTML = `
+                <div class="text-center p-4 text-danger">
+                    <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                    <p>Error loading due date history.</p>
+                </div>
+            `;
+        });
+});
+</script>
+{% endblock %} 

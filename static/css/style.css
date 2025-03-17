@@ -1,0 +1,143 @@
+/* Main Styles for Trello Due Date Monitor */
+
+/* Custom body styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+    color: #333;
+}
+
+/* Custom card styles */
+.card {
+    border-radius: 0.5rem;
+    border: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card.shadow {
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15) !important;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 2rem 0 rgba(58, 59, 69, 0.2) !important;
+}
+
+/* Custom navbar styles */
+.navbar-brand {
+    font-weight: 700;
+    font-size: 1.5rem;
+}
+
+/* Card with left border */
+.border-left-primary {
+    border-left: 0.25rem solid #4e73df !important;
+}
+
+.border-left-success {
+    border-left: 0.25rem solid #1cc88a !important;
+}
+
+.border-left-warning {
+    border-left: 0.25rem solid #f6c23e !important;
+}
+
+/* Timeline styles */
+.reminder-timeline {
+    position: relative;
+}
+
+.reminder-timeline::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 20px;
+    width: 2px;
+    background-color: #e9ecef;
+    z-index: 1;
+}
+
+/* Custom badge styles */
+.badge {
+    font-weight: 500;
+    padding: 0.4em 0.8em;
+}
+
+/* Hover effects for interactive elements */
+a, button {
+    transition: all 0.2s;
+}
+
+.table-primary {
+    --bs-table-bg: rgba(78, 115, 223, 0.1);
+}
+
+/* Chart container styling */
+.chart-container {
+    position: relative;
+    min-height: 200px;
+}
+
+/* Button styling */
+.btn-outline-primary {
+    border-color: #4e73df;
+    color: #4e73df;
+}
+
+.btn-outline-primary:hover {
+    background-color: #4e73df;
+    color: white;
+}
+
+.btn-primary {
+    background-color: #4e73df;
+    border-color: #4e73df;
+}
+
+.bg-primary {
+    background-color: #4e73df !important;
+}
+
+.text-primary {
+    color: #4e73df !important;
+}
+
+/* Animation for card hover */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(78, 115, 223, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(78, 115, 223, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(78, 115, 223, 0);
+    }
+}
+
+.reminder-row.table-primary {
+    animation: pulse 2s infinite;
+}
+
+/* Custom footer styling */
+footer {
+    background-color: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    color: #858796;
+}
+
+/* Responsive adjustments */
+@media (max-width: 767.98px) {
+    .display-5 {
+        font-size: 1.8rem;
+    }
+    
+    .card {
+        margin-bottom: 1rem;
+    }
+    
+    .navbar-brand {
+        font-size: 1.2rem;
+    }
+} 
